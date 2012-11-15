@@ -1,0 +1,190 @@
+<?php
+/**
+ * Discussion function library
+ */
+
+/**
+ * List all discussion topics
+ */
+function faculty_handle_all_page() {
+
+	elgg_pop_breadcrumb();
+	elgg_push_breadcrumb(elgg_echo('faculty:faculties'));
+
+	$content = elgg_list_entities(array(
+		'type' => 'object',
+		'subtype' => 'faculty',
+		'order_by' => 'e.last_action desc',
+		'limit' => 40,
+		'full_view' => false,
+	));
+
+	$params = array(
+		'content' => $content,
+		'title' => elgg_echo('faculty:faculties'),
+		'filter' => '',
+	);
+	elgg_register_title_button();
+
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * List discussion topics in a group
+ *
+ * @param int $guid Group entity GUID
+ */
+function discussion_handle_list_page($guid) {
+
+	elgg_set_page_owner_guid($guid);
+
+	$group = get_entity($guid);
+	if (!$group) {
+		register_error(elgg_echo('group:notfound'));
+		forward();
+	}
+	elgg_push_breadcrumb($group->name);
+
+	elgg_register_title_button();
+
+	group_gatekeeper();
+
+	$title = elgg_echo('item:object:groupforumtopic');
+	
+	$options = array(
+		'type' => 'object',
+		'subtype' => 'groupforumtopic',
+		'limit' => 20,
+		'order_by' => 'e.last_action desc',
+		'container_guid' => $guid,
+		'full_view' => false,
+	);
+	$content = elgg_list_entities($options);
+	if (!$content) {
+		$content = elgg_echo('discussion:none');
+	}
+
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Edit or add a faculty
+ *
+ * @param string $type 'add' or 'edit'
+ * @param int    $guid GUID of faculty
+ */
+function faculty_handle_edit_page($page, $guid = 0) {
+	admin_gatekeeper();
+
+	if ($page == 'add') {
+		elgg_set_page_owner_guid(elgg_get_logged_in_user_guid());
+		$title = elgg_echo('faculty:add');
+		elgg_push_breadcrumb($title);
+		$content = elgg_view('faculty/edit');
+	} else {
+		$title = elgg_echo("groups:edit");
+		$group = get_entity($guid);
+
+		if ($group && $group->canEdit()) {
+			elgg_set_page_owner_guid($group->getGUID());
+			elgg_push_breadcrumb($group->name, $group->getURL());
+			elgg_push_breadcrumb($title);
+			$content = elgg_view("groups/edit", array('entity' => $group));
+		} else {
+			$content = elgg_echo('groups:noaccess');
+		}
+	}
+	
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * View a faculty
+ *
+ * @param int $guid GUID of topic
+ */
+function faculty_handle_view_page($guid) {
+
+	elgg_set_page_owner_guid($guid);
+
+	$faculty = get_entity($guid);
+	if (!$faculty) {
+		forward('faculty/all');
+	}
+
+	elgg_push_breadcrumb($faculty->name);
+
+	$content = elgg_view('faculty/view/layout', array('entity' => $faculty));
+//	$sidebar = elgg_view('groups/sidebar/members', array('entity' => $group));
+	$sidebar = '';
+
+//	groups_register_profile_buttons($faculty);
+
+	$params = array(
+		'content' => $content,
+		'sidebar' => $sidebar,
+		'title' => $faculty->name,
+		'filter' => '',
+	);
+
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($faculty->name, $body);
+}
+
+/**
+ * Prepare discussion topic form variables
+ *
+ * @param ElggObject $topic Topic object if editing
+ * @return array
+ */
+function discussion_prepare_form_vars($topic = NULL) {
+	// input names => defaults
+	$values = array(
+		'title' => '',
+		'description' => '',
+		'status' => '',
+		'access_id' => ACCESS_DEFAULT,
+		'tags' => '',
+		'container_guid' => elgg_get_page_owner_guid(),
+		'guid' => null,
+		'entity' => $topic,
+	);
+
+	if ($topic) {
+		foreach (array_keys($values) as $field) {
+			if (isset($topic->$field)) {
+				$values[$field] = $topic->$field;
+			}
+		}
+	}
+
+	if (elgg_is_sticky_form('topic')) {
+		$sticky_values = elgg_get_sticky_values('topic');
+		foreach ($sticky_values as $key => $value) {
+			$values[$key] = $value;
+		}
+	}
+
+	elgg_clear_sticky_form('topic');
+
+	return $values;
+}

@@ -1,0 +1,419 @@
+<?php
+/**
+ * Courses function library
+ */
+
+/**
+ * List all courses
+ */
+function courses_handle_all_page() {
+
+	// all groups doesn't get link to self
+	elgg_pop_breadcrumb();
+	elgg_push_breadcrumb(elgg_echo('courses'));
+
+	$course = get_entity($guid);
+
+	if (isadminloggedin()) {
+		elgg_register_title_button();
+	}
+
+	$selected_tab = get_input('filter', 'newest');
+
+	switch ($selected_tab) {
+		case 'popular':
+			$content = elgg_list_entities_from_relationship_count(array(
+				'type' => 'group',
+				'subtype' => 'course',
+				'relationship' => 'member',
+				'inverse_relationship' => false,
+				'full_view' => false,
+			));
+			if (!$content) {
+				$content = elgg_echo('courses:none');
+			}
+			break;
+/*		case 'discussion':
+			$content = elgg_list_entities(array(
+				'type' => 'object',
+				'subtype' => 'groupforumtopic',
+				'order_by' => 'e.last_action desc',
+				'limit' => 40,
+				'full_view' => false,
+			));
+			if (!$content) {
+				$content = elgg_echo('discussion:none');
+			}
+			break;
+*/		case 'newest':
+		default:
+			$content = elgg_list_entities(array(
+				'type' => 'group',
+				'subtype' => 'course',
+				'full_view' => false,
+			));
+			if (!$content) {
+				$content = elgg_echo('courses:none');
+			}
+			break;
+	}
+
+	$filter = elgg_view('courses/group_sort_menu', array('selected' => $selected_tab));
+	
+	$sidebar = elgg_view('groups/sidebar/find');
+	$sidebar .= elgg_view('groups/sidebar/featured');
+
+	$params = array(
+		'content' => $content,
+		'sidebar' => $sidebar,
+		'filter' => $filter,
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page(elgg_echo('courses:all'), $body);
+}
+
+function groups_search_page() {
+	elgg_push_breadcrumb(elgg_echo('search'));
+
+	$tag = get_input("tag");
+	$title = elgg_echo('groups:search:title', array($tag));
+
+	// groups plugin saves tags as "interests" - see groups_fields_setup() in start.php
+	$params = array(
+		'metadata_name' => 'interests',
+		'metadata_value' => $tag,
+		'types' => 'group',
+		'full_view' => FALSE,
+	);
+	$content = elgg_list_entities_from_metadata($params);
+	if (!$content) {
+		$content = elgg_echo('groups:search:none');
+	}
+
+	$sidebar = elgg_view('groups/sidebar/find');
+	$sidebar .= elgg_view('groups/sidebar/featured');
+
+	$params = array(
+		'content' => $content,
+		'sidebar' => $sidebar,
+		'filter' => false,
+		'title' => $title,
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * List owned groups
+ */
+/**
+ * Create or edit a course
+ *
+ * @param string $page
+ * @param int $guid
+ */
+function courses_handle_edit_page($page, $guid = 0) {
+	admin_gatekeeper();
+	
+	if ($page == 'add') {
+		elgg_set_page_owner_guid(elgg_get_logged_in_user_guid());
+		$title = elgg_echo('courses:add');
+		elgg_push_breadcrumb($title);
+		$content = elgg_view('courses/edit');
+	} else {
+		$title = elgg_echo("courses:edit");
+		$course = get_entity($guid);
+
+		if ($course && $course->canEdit()) {
+			elgg_set_page_owner_guid($course->getGUID());
+			elgg_push_breadcrumb($course->name, $course->getURL());
+			elgg_push_breadcrumb($title);
+			$content = elgg_view("courses/edit", array('entity' => $course));
+		} else {
+			$content = elgg_echo('courses:noaccess');
+		}
+	}
+	
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Group invitations for a user
+ */
+function groups_handle_invitations_page() {
+	gatekeeper();
+
+	$user = elgg_get_page_owner_entity();
+
+	$title = elgg_echo('groups:invitations');
+	elgg_push_breadcrumb($title);
+
+	// @todo temporary workaround for exts #287.
+	$invitations = groups_get_invited_groups(elgg_get_logged_in_user_guid());
+	$content = elgg_view('groups/invitationrequests', array('invitations' => $invitations));
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Course profile page
+ *
+ * @param int $guid Course entity GUID
+ */
+function courses_handle_profile_page($guid) {
+	elgg_set_page_owner_guid($guid);
+
+	// turn this into a core function
+	global $autofeed;
+	$autofeed = true;
+
+	$course = get_entity($guid);
+	if (!$course) {
+		forward('courses/all');
+	}
+
+	elgg_push_breadcrumb($course->code.' - '.$course->name);
+
+	$content = elgg_view('courses/profile/layout', array('entity' => $course));
+	if (group_gatekeeper(false)) {
+		$sidebar = elgg_view('courses/sidebar/members', array('entity' => $course));
+	} else {
+		$sidebar = '';
+	}
+
+	courses_register_profile_buttons($course);
+
+	$params = array(
+		'content' => $content,
+		'sidebar' => $sidebar,
+		'title' => $course->code.' - '.$course->name,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($course->code.' - '.$course->name, $body);
+}
+
+/**
+ * Course activity page
+ *
+ * @param int $guid Group entity GUID
+ */
+function courses_handle_activity_page($guid) {
+
+	elgg_set_page_owner_guid($guid);
+
+	$group = get_entity($guid);
+	if (!$group || !elgg_instanceof($group, 'group')) {
+		forward();
+	}
+
+	group_gatekeeper();
+
+	$title = elgg_echo('groups:activity');
+
+	elgg_push_breadcrumb($group->name, $group->getURL());
+	elgg_push_breadcrumb($title);
+
+	$db_prefix = elgg_get_config('dbprefix');
+
+	$content = elgg_list_river(array(
+		'joins' => array("JOIN {$db_prefix}entities e ON e.guid = rv.object_guid"),
+		'wheres' => array("e.container_guid = $guid")
+	));
+	if (!$content) {
+		$content = '<p>' . elgg_echo('groups:activity:none') . '</p>';
+	}
+	
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Group members page
+ *
+ * @param int $guid Group entity GUID
+ */
+function groups_handle_members_page($guid) {
+
+	elgg_set_page_owner_guid($guid);
+
+	$group = get_entity($guid);
+	if (!$group || !elgg_instanceof($group, 'group')) {
+		forward();
+	}
+
+	group_gatekeeper();
+
+	$title = elgg_echo('groups:members:title', array($group->name));
+
+	elgg_push_breadcrumb($group->name, $group->getURL());
+	elgg_push_breadcrumb(elgg_echo('groups:members'));
+
+	$content = elgg_list_entities_from_relationship(array(
+		'relationship' => 'member',
+		'relationship_guid' => $group->guid,
+		'inverse_relationship' => true,
+		'types' => 'user',
+		'limit' => 20,
+	));
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Invite users to a group
+ *
+ * @param int $guid Group entity GUID
+ */
+function groups_handle_invite_page($guid) {
+	gatekeeper();
+
+	elgg_set_page_owner_guid($guid);
+
+	$group = get_entity($guid);
+
+	$title = elgg_echo('groups:invite:title');
+
+	elgg_push_breadcrumb($group->name, $group->getURL());
+	elgg_push_breadcrumb(elgg_echo('groups:invite'));
+
+	if ($group && $group->canEdit()) {
+		$content = elgg_view_form('groups/invite', array(
+			'id' => 'invite_to_group',
+			'class' => 'elgg-form-alt mtm',
+		), array(
+			'entity' => $group,
+		));
+	} else {
+		$content .= elgg_echo('groups:noaccess');
+	}
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Manage requests to join a course
+ * 
+ * @param int $guid Course entity GUID
+ */
+function courses_handle_requests_page($guid) {
+
+	gatekeeper();
+
+	elgg_set_page_owner_guid($guid);
+
+	$course = get_entity($guid);
+
+	$title = elgg_echo('courses:membershiprequests');
+
+	if ($course && $course->canEdit()) {
+		elgg_push_breadcrumb($course->code.' - '.$course->name, $course->getURL());
+		elgg_push_breadcrumb($title);
+		
+		$requests = elgg_get_entities_from_relationship(array(
+			'type' => 'user',
+			'relationship' => 'membership_request',
+			'relationship_guid' => $guid,
+			'inverse_relationship' => true,
+			'limit' => 0,
+		));
+		$content = elgg_view('courses/membershiprequests', array(
+			'requests' => $requests,
+			'entity' => $course,
+		));
+
+	} else {
+		$content = elgg_echo("courses:noaccess");
+	}
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+
+}
+
+/**
+ * Registers the buttons for title area of the course profile page
+ *
+ * @param ElggGroup $course
+ */
+function courses_register_profile_buttons($course) {
+
+	$actions = array();
+
+	// course owners
+	if ($course->canEdit()) {
+		// edit
+		$url = elgg_get_site_url() . "courses/edit/{$course->getGUID()}";
+		$actions[$url] = 'courses:edit';
+	}
+
+	// course members
+	if ($course->isMember(elgg_get_logged_in_user_entity())) {
+		if ($course->getOwnerGUID() != elgg_get_logged_in_user_guid()) {
+			// leave
+			$url = elgg_get_site_url() . "action/courses/leave?course_guid={$course->getGUID()}";
+			$url = elgg_add_action_tokens_to_url($url);
+			$actions[$url] = 'courses:leave';
+		}
+	} elseif (elgg_is_logged_in()) {
+		// join - admins can always join.
+		$url = elgg_get_site_url() . "action/courses/join?course_guid={$course->getGUID()}";
+		$url = elgg_add_action_tokens_to_url($url);
+		// request membership
+		$actions[$url] = 'courses:joinrequest';
+	}
+
+	if ($actions) {
+		foreach ($actions as $url => $text) {
+			elgg_register_menu_item('title', array(
+				'name' => $text,
+				'href' => $url,
+				'text' => elgg_echo($text),
+				'link_class' => 'elgg-button elgg-button-action',
+			));
+		}
+	}
+}

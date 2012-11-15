@@ -1,0 +1,300 @@
+<?php
+/**
+ * Material function library
+ */
+
+/**
+ * List material in a group
+ *
+ * @param int $guid Group entity GUID
+ */
+function material_handle_list_page($guid) {
+
+	elgg_set_page_owner_guid($guid);
+
+	$course = get_entity($guid);
+	if (!$course) {
+		register_error(elgg_echo('course:notfound'));
+		forward();
+	}
+	elgg_push_breadcrumb($course->code.' - '.$course->name);
+
+	elgg_register_title_button();
+
+	group_gatekeeper();
+
+	$title = elgg_echo('item:object:coursematerial');
+	
+	$selected_tab = get_input('filter', 'lecture');
+
+	switch ($selected_tab) {
+		case 'lab':
+			$options = array(
+				'type' => 'object',
+				'subtype' => 'material',
+				'limit' => 20,
+				'metadata_names' => array('sessiontype'),
+				'metadata_values' => array('lab'),
+				'order_by' => 'e.last_action desc',
+				'container_guid' => $guid,
+				'full_view' => false,
+			);
+			$content = elgg_list_entities_from_metadata($options);
+			if (!$content) {
+				$content = elgg_echo('lab:none');
+			}
+			break;
+		case 'assignment':
+			$options = array(
+				'type' => 'object',
+				'subtype' => 'material',
+				'limit' => 20,
+				'metadata_names' => array('sessiontype'),
+				'metadata_values' => array('assignment'),
+				'order_by' => 'e.last_action desc',
+				'container_guid' => $guid,
+				'full_view' => false,
+			);
+			$content = elgg_list_entities_from_metadata($options);
+			if (!$content) {
+				$content = elgg_echo('assignment:none');
+			}
+			break;
+		case 'tutorial':
+			$options = array(
+				'type' => 'object',
+				'subtype' => 'material',
+				'limit' => 20,
+				'metadata_names' => array('sessiontype'),
+				'metadata_values' => array('tutorial'),
+				'order_by' => 'e.last_action desc',
+				'container_guid' => $guid,
+				'full_view' => false,
+			);
+			$content = elgg_list_entities_from_metadata($options);
+			if (!$content) {
+				$content = elgg_echo('material:none');
+			}
+			break;
+		case 'lecture':
+			$options = array(
+				'type' => 'object',
+				'subtype' => 'material',
+				'limit' => 20,
+				'metadata_names' => array('sessiontype'),
+				'metadata_values' => array('lecture'),
+				'order_by' => 'e.last_action desc',
+				'container_guid' => $guid,
+				'full_view' => false,
+			);
+			$content = elgg_list_entities_from_metadata($options);
+			if (!$content) {
+				$content = elgg_echo('lecture:none');
+			}
+			break;
+		default:
+			$content = elgg_list_entities(array(
+				'type' => 'object',
+				'subtype' => 'material',
+				'full_view' => false,
+			));
+			if (!$content) {
+				$content = elgg_echo('material:none');
+			}
+			break;
+	}
+
+	$filter = elgg_view('material/material_sort_menu', array('selected' => $selected_tab, 'course_guid' => $course->guid));
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => $filter,
+	);
+
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Edit or add material
+ *
+ * @param string $type 'add' or 'edit'
+ * @param int    $guid GUID of group or topic
+ */
+function material_handle_edit_page($type, $guid) {
+	gatekeeper();
+
+	if ($type == 'add') {
+		$course = get_entity($guid);
+		if (!$course) {
+			register_error(elgg_echo('course:notfound'));
+			forward();
+		}
+
+		// make sure user has permissions to write to container
+		if (!$course->canWriteToContainer()) {
+			register_error(elgg_echo('courses:permissions:error'));
+			forward($course->getURL());
+		}
+
+		$title = elgg_echo('material:add');
+
+		elgg_push_breadcrumb($course->code.' - '.$course->name, "material/course/$course->guid");
+		elgg_push_breadcrumb($title);
+
+		$form_vars = array('enctype' => 'multipart/form-data');
+		$body_vars = material_prepare_form_vars();
+		$content = elgg_view_form('material/upload', $form_vars, $body_vars);
+	} else {
+		$material = get_entity($guid);
+		if (!$material || !$material->canEdit()) {
+			register_error(elgg_echo('material:notfound'));
+			forward();
+		}
+		$course = $material->getContainerEntity();
+		if (!$course) {
+			register_error(elgg_echo('course:notfound'));
+			forward();
+		}
+
+		$title = elgg_echo('courses:editmaterial');
+
+		elgg_push_breadcrumb($course->code.' - '.$course->name, "material/course/$course->guid");
+		elgg_push_breadcrumb($course->title, $material->getURL());
+		elgg_push_breadcrumb($title);
+
+		$form_vars = array('enctype' => 'multipart/form-data');
+		$body_vars = material_prepare_form_vars($material);
+		$content = elgg_view_form('material/upload', $form_vars, $body_vars);
+	}
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * View a course material
+ *
+ * @param int $guid GUID of topic
+ */
+function material_handle_view_page($guid) {
+	// We now have RSS on topics
+	global $autofeed;
+	$autofeed = true;
+
+	$file = get_entity($guid);
+
+	$owner = elgg_get_page_owner_entity();
+
+	elgg_push_breadcrumb(elgg_echo('file'), 'file/all');
+
+	$crumbs_title = $owner->name;
+	if (elgg_instanceof($owner, 'group')) {
+		elgg_push_breadcrumb($crumbs_title, "file/group/$owner->guid/all");
+	} else {
+		elgg_push_breadcrumb($crumbs_title, "file/owner/$owner->username");
+	}
+
+	$title = $file->title;
+
+	elgg_push_breadcrumb($title);
+
+	$content = elgg_view_entity($file, array('full_view' => true));
+	$content .= elgg_view_comments($file);
+
+	elgg_register_menu_item('title', array(
+		'name' => 'download',
+		'text' => elgg_echo('file:download'),
+		'href' => "material/download/$file->guid",
+		'link_class' => 'elgg-button elgg-button-action',
+	));
+
+	$body = elgg_view_layout('content', array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	));
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Download a course material
+ *
+ * @param int $guid GUID of topic
+ */
+function material_handle_download_page($guid) {
+	// Get the file
+	$file = get_entity($guid);
+	if (!$file) {
+		register_error(elgg_echo("file:downloadfailed"));
+		forward();
+	}
+
+	$mime = $file->getMimeType();
+	if (!$mime) {
+		$mime = "application/octet-stream";
+	}
+
+	$filename = $file->originalfilename;
+
+	// fix for IE https issue
+	header("Pragma: public");
+
+	header("Content-type: $mime");
+	if (strpos($mime, "image/") !== false) {
+		header("Content-Disposition: inline; filename=\"$filename\"");
+	} else {
+		header("Content-Disposition: attachment; filename=\"$filename\"");
+	}
+
+	ob_clean();
+	flush();
+	readfile($file->getFilenameOnFilestore());
+}
+
+/**
+ * Prepare course material form variables
+ *
+ * @param ElggObject $material Material object if editing
+ * @return array
+ */
+function material_prepare_form_vars($material = NULL) {
+	// input names => defaults
+	$values = array(
+		'title' => '',
+		'description' => '',
+		'sessoiontype' => '',
+		'access_id' => ACCESS_DEFAULT,
+		'container_guid' => elgg_get_page_owner_guid(),
+		'guid' => null,
+		'entity' => $file,
+	);
+
+	if ($file) {
+		foreach (array_keys($values) as $field) {
+			if (isset($material->$field)) {
+				$values[$field] = $file->$field;
+			}
+		}
+	}
+
+	if (elgg_is_sticky_form('material')) {
+		$sticky_values = elgg_get_sticky_values('material');
+		foreach ($sticky_values as $key => $value) {
+			$values[$key] = $value;
+		}
+	}
+
+	elgg_clear_sticky_form('material');
+
+	return $values;
+}

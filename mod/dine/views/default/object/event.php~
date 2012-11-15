@@ -1,0 +1,51 @@
+<?php
+/**
+ * View for event objects
+ *
+ * @package Event
+ */
+
+$full = elgg_extract('full_view', $vars, FALSE);
+$event = elgg_extract('entity', $vars, FALSE);
+$owner = get_entity($event->owner_guid);
+
+if (!$event) {
+	return TRUE;
+}
+
+$metadata = elgg_view_menu('entity', array(
+	'entity' => $vars['entity'],
+	'handler' => 'events',
+	'sort_by' => 'priority',
+	'class' => 'elgg-menu-hz',
+));
+
+if ($full) {
+
+	$event_icon = elgg_view_entity_icon($event, 'large');
+	$list_body = elgg_view('object/events/summary', array('entity' => $event, 'full_view' => $full));
+
+	echo "<div class=\"elgg-events-summary\">";
+	echo elgg_view_image_block($event_icon, $list_body);
+	echo "</div>";
+
+} else {
+	// brief view
+
+	elgg_load_js('lightbox');
+	elgg_load_css('lightbox');
+
+	$owner_icon = elgg_view_entity_icon($owner, 'small', array('link_class' => 'elgg-lightbox'));
+
+	$params = array(
+		'entity' => $event,
+		'full_view' => $full,
+		'metadata' => $metadata,
+	);
+	$params = $params + $vars;
+	$list_body = elgg_view('object/events/summary', $params);
+//	$list_body = elgg_view('object/elements/summary', $params);
+
+	echo elgg_view_image_block($owner_icon, $list_body);
+}
+

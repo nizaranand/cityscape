@@ -1,0 +1,102 @@
+<?php
+/**
+ * View for book review objects
+ *
+ * @package Book
+ */
+
+//forward('http://facebook.com');
+
+$full = elgg_extract('full_view', $vars, FALSE);
+$review = elgg_extract('entity', $vars, FALSE);
+
+if (!$review) {
+	return TRUE;
+}
+
+$poster = $review->getOwnerEntity();
+$book = $review->getContainerEntity();
+
+//$author = $book->author;
+$body = $review->body;
+
+$poster_icon = elgg_view_entity_icon($poster, 'small');
+$poster_link = elgg_view('output/url', array(
+	'href' => $poster->getURL(),
+	'text' => $poster->name,
+	'is_trusted' => true,
+));
+$poster_text = elgg_echo('byline', array($poster_link));
+
+$tags = elgg_view('output/tags', array('tags' => $review->tags));
+$date = elgg_view_friendly_time($review->time_created);
+
+
+if ($review->comments_on != 'Off') {
+	$comments_count = $review->countComments();
+	//only display if there are commments
+	if ($comments_count != 0) {
+		$text = elgg_echo("comments") . " ($comments_count)";
+		$comments_link = elgg_view('output/url', array(
+			'href' => $review->getURL() . '#review-comments',
+			'text' => $text,
+			'is_trusted' => true,
+		));
+	} else {
+		$comments_link = '';
+	}
+} else {
+	$comments_link = '';
+}
+
+$metadata = elgg_view_menu('entity', array(
+	'entity' => $vars['entity'],
+	'handler' => 'review',
+	'sort_by' => 'priority',
+	'class' => 'elgg-menu-hz',
+));
+
+// do not show the metadata and controls in widget view
+if (elgg_in_context('widgets')) {
+	$metadata = '';
+}
+
+if ($full) {
+
+	$subtitle = "$date";
+
+	$params = array(
+		'entity' => $review,
+		'metadata' => $metadata,
+		'title' => $poster_text,
+		'subtitle' => $subtitle,
+		'tags' => $tags,
+	);
+	$params = $params + $vars;
+	$list_body = elgg_view('object/elements/summary', $params);
+
+	$info = elgg_view_image_block($poster_icon, $list_body);
+
+	$body = elgg_view('output/longtext', array('value' => $review->body));
+
+	echo <<<HTML
+$info
+$body
+HTML;
+
+} else {
+	// brief view
+	$subtitle = "$poster_text $date $comments_link <span class=\"groups-latest-reply\">$reply_text</span>";
+
+	$params = array(
+		'entity' => $review,
+		'metadata' => $metadata,
+		'subtitle' => $subtitle,
+		'tags' => $tags,
+	);
+	$params = $params + $vars;
+	$list_body = elgg_view('object/elements/summary', $params);
+
+	echo elgg_view_image_block($poster_icon, $list_body);
+}
+

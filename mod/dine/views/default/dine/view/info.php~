@@ -1,0 +1,25 @@
+<?php
+/**
+ * Profile owner block
+ */
+
+$user = elgg_get_page_owner_entity();
+
+if (!$user) {
+	// no user so we quit view
+	echo elgg_echo('viewfailure', array(__FILE__));
+	return TRUE;
+}
+
+$icon = elgg_view_entity_icon($user, 'large', array(
+	'use_hover' => false,
+	'use_link' => false,
+));
+
+echo <<<HTML
+
+<div>
+	$icon
+</div>
+
+HTML;

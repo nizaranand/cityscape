@@ -1,0 +1,217 @@
+<?php
+/**
+ * Reviews function library
+ */
+
+/**
+ * List all reviews topics
+ */
+function reviews_handle_all_page() {
+
+	elgg_pop_breadcrumb();
+	elgg_push_breadcrumb(elgg_echo('reviews'));
+
+	$content = elgg_list_entities(array(
+		'type' => 'object',
+		'subtype' => 'dinereview',
+		'order_by' => 'e.last_action desc',
+		'limit' => 40,
+		'full_view' => false,
+	));
+
+	$params = array(
+		'content' => $content,
+		'title' => elgg_echo('reviews:latest'),
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * List reviews of a dine
+ *
+ * @param int $guid Dine entity GUID
+ */
+function reviews_handle_list_page($username) {
+
+	elgg_set_page_owner_guid($guid);
+
+	$dine = get_user_by_username($username);
+	if (!$dine) {
+		register_error(elgg_echo('dine:notfound'));
+		forward();
+	}
+	elgg_push_breadcrumb($dine->title);
+
+	elgg_register_title_button();
+
+	$title = elgg_echo('item:object:dinereview');
+	
+	$options = array(
+		'type' => 'object',
+		'subtype' => 'dinereview',
+		'limit' => 20,
+		'order_by' => 'e.last_action desc',
+		'container_guid' => $guid,
+		'full_view' => false,
+	);
+	$content = elgg_list_entities($options);
+	if (!$content) {
+		$content = elgg_echo('reviews:none');
+	}
+
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Edit or add a reviews topic
+ *
+ * @param string $type 'add' or 'edit'
+ * @param int    $guid GUID of dine or topic
+ */
+function reviews_handle_edit_page($type, $guid) {
+	gatekeeper();
+
+	if ($type == 'add') {
+		$dine = get_entity($guid);
+		if (!$dine) {
+			register_error(elgg_echo('dine:notfound'));
+			forward();
+		}
+
+		// make sure user has permissions to add a topic to container
+		if (!$dine->canWriteToContainer(0, 'object', 'dinereview')) {
+			register_error(elgg_echo('dines:permissions:error'));
+			forward($dine->getURL());
+		}
+
+		$title = elgg_echo('dines:review:add');
+
+		elgg_push_breadcrumb($dine->title, "reviews/owner/$dine->guid");
+		elgg_push_breadcrumb($title);
+
+		$body_vars = reviews_prepare_form_vars();
+		$content = elgg_view_form('reviews/save', array(), $body_vars);
+	} else {
+		$review = get_entity($guid);
+		if (!$review || !$review->canEdit()) {
+			register_error(elgg_echo('reviews:notfound'));
+			forward();
+		}
+		$dine = $review->getContainerEntity();
+		if (!$dine) {
+			register_error(elgg_echo('dine:notfound'));
+			forward();
+		}
+
+		$title = elgg_echo('dines:review:edit');
+
+		elgg_push_breadcrumb($dine->title, "reviews/owner/$dine->guid");
+		elgg_push_breadcrumb($review->title, $review->getURL());
+		elgg_push_breadcrumb($title);
+
+		$body_vars = reviews_prepare_form_vars($review);
+		$content = elgg_view_form('reviews/save', array(), $body_vars);
+	}
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * View a reviews topic
+ *
+ * @param int $guid GUID of topic
+ */
+function reviews_handle_view_page($guid) {
+	// We now have RSS on topics
+	global $autofeed;
+	$autofeed = true;
+
+	$review = get_entity($guid);
+	if (!$review) {
+		register_error(elgg_echo('reviews:notfound'));
+		forward();
+	}
+
+	$dine = $review->getContainerEntity();
+	if (!$dine) {
+		register_error(elgg_echo('dine:notfound'));
+		forward();
+	}
+
+	elgg_set_page_owner_guid($dine->getGUID());
+
+	elgg_push_breadcrumb($dine->name, "reviews/owner/$dine->guid");
+	elgg_push_breadcrumb($review->title);
+
+	$content = elgg_view_entity($review, array('full_view' => true));
+	$content .= elgg_view_comments($review);
+//	$content .= elgg_view('reviews/replies', array(
+//		'entity' => $review,
+//	));
+
+	$params = array(
+		'content' => $content,
+		'title' => $review->title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($review->title, $body);
+}
+
+/**
+ * Prepare reviews topic form variables
+ *
+ * @param ElggObject $topic Topic object if editing
+ * @return array
+ */
+function reviews_prepare_form_vars($review = NULL) {
+	// input names => defaults
+	$values = array(
+		'title' => '',
+		'description' => '',
+		'body' => '',
+		'tags' => '',
+		'container_guid' => elgg_get_page_owner_guid(),
+		'guid' => null,
+		'entity' => $review,
+	);
+
+	if ($review) {
+		foreach (array_keys($values) as $field) {
+			if (isset($topic->$field)) {
+				$values[$field] = $review->$field;
+			}
+		}
+	}
+
+	if (elgg_is_sticky_form('review')) {
+		$sticky_values = elgg_get_sticky_values('topic');
+		foreach ($sticky_values as $key => $value) {
+			$values[$key] = $value;
+		}
+	}
+
+	elgg_clear_sticky_form('review');
+
+	return $values;
+}

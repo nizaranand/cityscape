@@ -1,0 +1,623 @@
+<?php
+/**
+ * Stores function library
+ */
+
+/**
+ * List all stores
+ */
+function stores_handle_all_page() {
+
+	// all groups doesn't get link to self
+	elgg_pop_breadcrumb();
+	elgg_push_breadcrumb(elgg_echo('stores'));
+
+	$store = get_entity($guid);
+
+	if (elgg_is_admin_logged_in()) {
+		elgg_register_title_button("stores", "addcategory");
+	}
+
+	$selected_tab = get_input('filter', 'newest');
+
+	switch ($selected_tab) {
+		case 'popular':
+			$content = elgg_list_entities(array(
+				'type' => 'group',
+				'subtype' => 'category',
+				'order_by' => 'e.last_action desc',
+				'limit' => 40,
+				'full_view' => false,
+			));
+			if (!$content) {
+				$content = elgg_echo('stores:none');
+			}
+			break;
+/*		case 'discussion':
+			$content = elgg_list_entities(array(
+				'type' => 'object',
+				'subtype' => 'groupforumtopic',
+				'order_by' => 'e.last_action desc',
+				'limit' => 40,
+				'full_view' => false,
+			));
+			if (!$content) {
+				$content = elgg_echo('discussion:none');
+			}
+			break;
+*/		case 'newest':
+		default:
+			$content = elgg_list_entities(array(
+				'type' => 'group',
+				'subtype' => 'category',
+				'full_view' => false,
+			));
+			if (!$content) {
+				$content = elgg_echo('stores:none');
+			}
+			break;
+	}
+
+	$filter = elgg_view('stores/group_sort_menu', array('selected' => $selected_tab));
+	
+//	$sidebar = elgg_view('groups/sidebar/find');
+//	$sidebar .= elgg_view('groups/sidebar/featured');
+
+	$params = array(
+		'content' => $content,
+		'sidebar' => $sidebar,
+		'filter' => $filter,
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page(elgg_echo('stores:all'), $body);
+}
+
+function groups_search_page() {
+	elgg_push_breadcrumb(elgg_echo('search'));
+
+	$tag = get_input("tag");
+	$title = elgg_echo('groups:search:title', array($tag));
+
+	// groups plugin saves tags as "interests" - see groups_fields_setup() in start.php
+	$params = array(
+		'metadata_name' => 'interests',
+		'metadata_value' => $tag,
+		'types' => 'group',
+		'full_view' => FALSE,
+	);
+	$content = elgg_list_entities_from_metadata($params);
+	if (!$content) {
+		$content = elgg_echo('groups:search:none');
+	}
+
+	$sidebar = elgg_view('groups/sidebar/find');
+	$sidebar .= elgg_view('groups/sidebar/featured');
+
+	$params = array(
+		'content' => $content,
+		'sidebar' => $sidebar,
+		'filter' => false,
+		'title' => $title,
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * List owned groups
+ */
+/**
+ * Create or edit a store
+ *
+ * @param string $page
+ * @param int $guid
+ */
+function stores_handle_add_page($guid) {
+	admin_gatekeeper();
+	
+	$category = get_entity($guid);
+	
+	elgg_set_page_owner_guid($guid);
+	$title = elgg_echo('stores:add');
+	elgg_push_breadcrumb($category->title, $category->getURL());
+	elgg_push_breadcrumb($title);
+	$content = elgg_view('stores/add', array('category_guid' => $guid));
+	
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Group invitations for a user
+ */
+function groups_handle_invitations_page() {
+	gatekeeper();
+
+	$user = elgg_get_page_owner_entity();
+
+	$title = elgg_echo('groups:invitations');
+	elgg_push_breadcrumb($title);
+
+	// @todo temporary workaround for exts #287.
+	$invitations = groups_get_invited_groups(elgg_get_logged_in_user_guid());
+	$content = elgg_view('groups/invitationrequests', array('invitations' => $invitations));
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * List owned groups
+ */
+/**
+ * Create or edit a store
+ *
+ * @param string $page
+ * @param int $guid
+ */
+function stores_handle_addcategory_page() {
+	admin_gatekeeper();
+	
+	elgg_set_page_owner_guid(elgg_get_logged_in_user_guid());
+	$title = elgg_echo('stores:addcategory');
+	elgg_push_breadcrumb($title);
+	$content = elgg_view('stores/addcategory');
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Store view page
+ *
+ * @param int $guid Store entity GUID
+ */
+function stores_handle_view_page($username) {
+
+	// turn this into a core function
+	global $autofeed;
+	$autofeed = true;
+
+	$user = get_user_by_username($username);
+
+	// short circuit if invalid or banned username
+	if (!$user || ($user->isBanned() && !elgg_is_admin_logged_in())) {
+		register_error(elgg_echo('profile:notfound'));
+		forward();
+	}
+
+	elgg_set_page_owner_guid($user->guid);
+
+	elgg_push_breadcrumb($user->name);
+
+
+	$action = NULL;
+	if (isset($page[1])) {
+		$action = $page[1];
+	}
+
+	if ($action == 'edit') {
+		// use the core profile edit page
+		$base_dir = elgg_get_root_path();
+		require "{$base_dir}pages/profile/edit.php";
+		return true;
+	}
+
+	// main profile page
+	$params = array(
+		'content' => elgg_view('profile/wrapper'),
+		'num_columns' => 3,
+	);
+	$content = elgg_view_layout('widgets', $params);
+
+	$body = elgg_view_layout('one_column', array('content' => $content));
+	echo elgg_view_page($user->name, $body);
+	return true;
+}
+
+/**
+ * Store view page
+ *
+ * @param int $guid Store entity GUID
+ */
+function stores_handle_category_page($guid) {
+
+	elgg_set_page_owner_guid($guid);
+
+	elgg_push_context('stores');
+
+	// turn this into a core function
+	global $autofeed;
+	$autofeed = true;
+
+	$category = get_entity($guid);
+	if (!$category) {
+		forward('groups/all');
+	}
+
+	elgg_push_breadcrumb($category->title);
+
+	$content = elgg_view('stores/category/view/layout', array('entity' => $category));
+	$sidebar .= elgg_view('groups/sidebar/members', array('entity' => $group));
+
+	elgg_register_title_button();
+
+	$params = array(
+		'content' => $content,
+		'sidebar' => $sidebar,
+		'title' => elgg_view_entity($category),
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($category->name, $body);
+}
+
+/**
+ * Create new event
+ *
+ * @param string $page
+ * @param string username
+ */
+function stores_handle_event_page($page, $username = '') {
+	gatekeeper();
+	
+	if ($page == 'offer') {
+		elgg_set_page_owner_guid(elgg_get_logged_in_user_guid());
+		$title = elgg_echo('groups:add');
+		elgg_push_breadcrumb($title);
+		$content = elgg_view('groups/edit');
+	} else if ($page == 'auction') {
+		$title = elgg_echo("groups:edit");
+		$group = get_entity($guid);
+
+		if ($group && $group->canEdit()) {
+			elgg_set_page_owner_guid($group->getGUID());
+			elgg_push_breadcrumb($group->name, $group->getURL());
+			elgg_push_breadcrumb($title);
+			$content = elgg_view("groups/edit", array('entity' => $group));
+		} else {
+			$content = elgg_echo('groups:noaccess');
+		}
+	} else if ($page == 'deal') {
+	}
+	
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Store activity page
+ *
+ * @param int $guid Group entity GUID
+ */
+function stores_handle_activity_page($guid) {
+
+	elgg_set_page_owner_guid($guid);
+
+	$group = get_entity($guid);
+	if (!$group || !elgg_instanceof($group, 'group')) {
+		forward();
+	}
+
+	group_gatekeeper();
+
+	$title = elgg_echo('groups:activity');
+
+	elgg_push_breadcrumb($group->name, $group->getURL());
+	elgg_push_breadcrumb($title);
+
+	$db_prefix = elgg_get_config('dbprefix');
+
+	$content = elgg_list_river(array(
+		'joins' => array("JOIN {$db_prefix}entities e ON e.guid = rv.object_guid"),
+		'wheres' => array("e.container_guid = $guid")
+	));
+	if (!$content) {
+		$content = '<p>' . elgg_echo('groups:activity:none') . '</p>';
+	}
+	
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Group members page
+ *
+ * @param int $guid Group entity GUID
+ */
+function groups_handle_members_page($guid) {
+
+	elgg_set_page_owner_guid($guid);
+
+	$group = get_entity($guid);
+	if (!$group || !elgg_instanceof($group, 'group')) {
+		forward();
+	}
+
+	group_gatekeeper();
+
+	$title = elgg_echo('groups:members:title', array($group->name));
+
+	elgg_push_breadcrumb($group->name, $group->getURL());
+	elgg_push_breadcrumb(elgg_echo('groups:members'));
+
+	$content = elgg_list_entities_from_relationship(array(
+		'relationship' => 'member',
+		'relationship_guid' => $group->guid,
+		'inverse_relationship' => true,
+		'types' => 'user',
+		'limit' => 20,
+	));
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Invite users to a group
+ *
+ * @param int $guid Group entity GUID
+ */
+function groups_handle_invite_page($guid) {
+	gatekeeper();
+
+	elgg_set_page_owner_guid($guid);
+
+	$group = get_entity($guid);
+
+	$title = elgg_echo('groups:invite:title');
+
+	elgg_push_breadcrumb($group->name, $group->getURL());
+	elgg_push_breadcrumb(elgg_echo('groups:invite'));
+
+	if ($group && $group->canEdit()) {
+		$content = elgg_view_form('groups/invite', array(
+			'id' => 'invite_to_group',
+			'class' => 'elgg-form-alt mtm',
+		), array(
+			'entity' => $group,
+		));
+	} else {
+		$content .= elgg_echo('groups:noaccess');
+	}
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+/**
+ * Manage requests to join a store
+ * 
+ * @param int $guid Store entity GUID
+ */
+function stores_handle_requests_page($guid) {
+
+	gatekeeper();
+
+	elgg_set_page_owner_guid($guid);
+
+	$store = get_entity($guid);
+
+	$title = elgg_echo('stores:membershiprequests');
+
+	if ($store && $store->canEdit()) {
+		elgg_push_breadcrumb($store->code.' - '.$store->name, $store->getURL());
+		elgg_push_breadcrumb($title);
+		
+		$requests = elgg_get_entities_from_relationship(array(
+			'type' => 'user',
+			'relationship' => 'membership_request',
+			'relationship_guid' => $guid,
+			'inverse_relationship' => true,
+			'limit' => 0,
+		));
+		$content = elgg_view('stores/membershiprequests', array(
+			'requests' => $requests,
+			'entity' => $store,
+		));
+
+	} else {
+		$content = elgg_echo("stores:noaccess");
+	}
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+
+}
+
+/**
+ * Registers the buttons for title area of the store profile page
+ *
+ * @param ElggGroup $store
+ */
+function stores_register_view_buttons($entity) {
+
+	$actions = array();
+	if(elgg_instanceof($entity, 'user', 'store')) {
+
+		// store owners
+		if ($entity->canEdit()) {
+			// edit icon
+			$url = elgg_get_site_url() . "/avatar/edit/{$entity->username}";
+			$actions[$url] = 'stores:editicon';
+
+			// edit
+			$url = elgg_get_site_url() . "/profile/{$entity->username}/edit";
+			$actions[$url] = 'stores:edit';
+
+			// add an offer
+			$url = elgg_get_site_url() . "/stores/{$entity->username}/add_offer";
+			$actions[$url] = 'stores:addoffer';
+
+			// add an auction
+			$url = elgg_get_site_url() . "/stores/{$entity->username}/add_auction";
+			$actions[$url] = 'stores:addauction';
+
+			// add a deal
+			$url = elgg_get_site_url() . "/stores/{$entity->username}/add_deal";
+			$actions[$url] = 'stores:adddeal';
+		}
+
+		// store members
+		if ($entity->isFriend(elgg_get_logged_in_user_entity())) {
+			if ($entity->getOwnerGUID() != elgg_get_logged_in_user_guid()) {
+				// leave
+				$url = elgg_get_site_url() . "action/stores/leave?store_guid={$entity->getGUID()}";
+				$url = elgg_add_action_tokens_to_url($url);
+				$actions[$url] = 'stores:leave';
+			}
+		} else if (elgg_is_logged_in()) {
+			// join - admins can always join.
+			$url = elgg_get_site_url() . "action/stores/follow?store_guid={$entity->getGUID()}";
+			$url = elgg_add_action_tokens_to_url($url);
+			$actions[$url] = 'stores:follow';
+		}
+	} else if(elgg_instanceof($entity, 'group', 'category')) {
+		// add a store to a specific category
+		$url = elgg_get_site_url() . "/stores/add/{$entity->getGUID()}";
+		$actions[$url] = 'stores:add';
+	}
+
+	if ($actions) {
+		foreach ($actions as $url => $text) {
+			elgg_register_menu_item('title', array(
+				'name' => $text,
+				'href' => $url,
+				'text' => elgg_echo($text),
+				'link_class' => 'elgg-button elgg-button-action',
+			));
+		}
+	}
+}
+
+/**
+ * Registers a store, returning false if the username already exists
+ *
+ * @param string $username              The username of the new user
+ * @param string $password              The password
+ * @param string $name                  The user's display name
+ * @param string $email                 Their email address
+ * @param bool   $allow_multiple_emails Allow the same email address to be
+ *                                      registered multiple times?
+ * @param int    $friend_guid           GUID of a user to friend once fully registered
+ * @param string $invitecode            An invite code from a friend
+ *
+ * @return int|false The new user's GUID; false on failure
+ */
+function register_store($username, $password, $name, $email,
+$allow_multiple_emails = false) {
+
+//	forward('http://facebook.com');
+	// Load the configuration
+	global $CONFIG;
+
+	// no need to trim password.
+	$username = trim($username);
+	$name = trim(strip_tags($name));
+	$email = trim($email);
+
+	// A little sanity checking
+	if (empty($username)
+	|| empty($password)
+	|| empty($name)
+	|| empty($email)) {
+		return false;
+	}
+
+	// Make sure a user with conflicting details hasn't registered and been disabled
+	$access_status = access_get_show_hidden_status();
+	access_show_hidden_entities(true);
+
+	if (!validate_email_address($email)) {
+		throw new RegistrationException(elgg_echo('registration:emailnotvalid'));
+	}
+
+	if (!validate_password($password)) {
+		throw new RegistrationException(elgg_echo('registration:passwordnotvalid'));
+	}
+
+	if (!validate_username($username)) {
+		throw new RegistrationException(elgg_echo('registration:usernamenotvalid'));
+	}
+
+	if ($user = get_user_by_username($username)) {
+		throw new RegistrationException(elgg_echo('registration:userexists'));
+	}
+
+	if ((!$allow_multiple_emails) && (get_user_by_email($email))) {
+		throw new RegistrationException(elgg_echo('registration:dupeemail'));
+	}
+
+	access_show_hidden_entities($access_status);
+
+	// Create user
+	$user = new ElggStore();
+	$user->username = $username;
+	$user->email = $email;
+	$user->name = $name;
+	$user->access_id = ACCESS_PUBLIC;
+	$user->salt = generate_random_cleartext_password(); // Note salt generated before password!
+	$user->password = generate_user_password($user, $password);
+	$user->owner_guid = 0; // Users aren't owned by anyone, even if they are admin created.
+	$user->container_guid = 0; // Users aren't contained by anyone, even if they are admin created.
+	$user->language = get_current_language();
+	$user->save();
+
+
+	// Turn on email notifications by default
+	set_user_notification_setting($user->getGUID(), 'email', true);
+
+	return $user->getGUID();
+}
+

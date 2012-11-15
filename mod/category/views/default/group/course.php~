@@ -1,0 +1,41 @@
+<?php 
+/**
+ * Course entity view
+ * 
+ * @package ElggGroups
+ */
+
+$course = $vars['entity'];
+$title = elgg_view('output/url', array(
+	'href' => $course->getURL(),
+	'text' => $course->code . ' - ' . $course->name,
+	'is_trusted' => true,
+));
+$metadata = elgg_view_menu('entity', array(
+	'entity' => $course,
+	'handler' => 'courses',
+	'sort_by' => 'priority',
+	'class' => 'elgg-menu-hz',
+));
+
+if (elgg_in_context('owner_block') || elgg_in_context('widgets')) {
+	$metadata = '';
+}
+
+
+if ($vars['full_view']) {
+	echo elgg_view("courses/profile/profile_block", $vars);
+} else {
+	// brief view
+
+	$params = array(
+		'entity' => $course,
+		'metadata' => $metadata,
+		'title' => $title,
+		'subtitle' => $course->abstract,
+	);
+	$params = $params + $vars;
+	$list_body = elgg_view('group/elements/summary', $params);
+
+	echo elgg_view_image_block('', $list_body, $vars);
+}

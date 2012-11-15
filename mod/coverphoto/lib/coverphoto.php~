@@ -1,0 +1,46 @@
+<?php
+/**
+ * Cover photo function library
+ *
+ * @package Cityscape.Coverphoto
+ */
+
+/**
+ * Add or edit a cover photo
+ */
+function coverphoto_handle_edit_page($page, $guid) {
+
+	if(!elgg_instanceof(elgg_get_logged_in_user_entity(), 'user', 'store') && !elgg_is_admin_logged_in()) {
+		forward();
+	}
+
+	elgg_set_page_owner_guid(elgg_get_logged_in_user_guid());
+
+	if ($page == 'add') {
+		$title = elgg_echo('events:add');
+		elgg_push_breadcrumb($title);
+		$content = elgg_view('events/edit');
+	} else {
+		$title = elgg_echo('events:edit');
+		$event = get_entity($guid);
+
+		if ($event && $event->canEdit()) {
+			elgg_push_breadcrumb($event->title, $event->getURL());
+			elgg_push_breadcrumb($title);
+			$content = elgg_view('events/edit', array('entity' => $event));
+		} else {
+			$content = elgg_echo('events:noaccess');
+		}
+	}
+
+	$params = array(
+		'content' => $content,
+		'title' => $title,
+		'filter' => '',
+	);
+	$body = elgg_view_layout('content', $params);
+
+	echo elgg_view_page($title, $body);
+}
+
+

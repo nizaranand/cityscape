@@ -1,0 +1,39 @@
+<?php
+/**
+ * Elgg add store form.
+ *
+ * @package ElggStores
+ * 
+ */
+
+$title = $description = '';
+
+if (elgg_is_sticky_form('useradd')) {
+	extract(elgg_get_sticky_values('book'));
+	elgg_clear_sticky_form('useradd');
+	if (is_array($admin)) {
+		$admin = $admin[0];
+	}
+}
+?>
+<div>
+	<label><?php echo elgg_echo('title');?></label><br />
+	<?php
+	echo elgg_view('input/text', array(
+		'name' => 'title',
+		'value' => $title,
+	));
+	?>
+</div>
+<div>
+	<label><?php echo elgg_echo('description');?></label><br />
+	<?php
+	echo elgg_view('input/plaintext', array(
+		'name' => 'description',
+		'value' => $description,
+	));
+	?>
+</div>
+<div class="elgg-foot">
+	<?php echo elgg_view('input/submit', array('value' => elgg_echo('submit'))); ?>
+</div>

@@ -1,0 +1,109 @@
+<?php
+/**
+ * View for book objects
+ *
+ * @package Book
+ */
+
+$full = elgg_extract('full_view', $vars, FALSE);
+$book = elgg_extract('entity', $vars, FALSE);
+$authors = elgg_get_entities_from_relationship(array(
+	'relationship' => 'wrote',
+	'relationship_guid' => $book->guid,
+	'inverse_relationship' => true,
+	'type' => 'object',
+	'subtype' => 'author',
+	'full_view' => FALSE,
+	'limit' => 20,
+	'order_by' => 'e.last_action asc',
+));
+
+if (!$book) {
+	return TRUE;
+}
+
+//$author = $book->author;
+$excerpt = $book->excerpt;
+if (!$excerpt) {
+	$excerpt = elgg_get_excerpt($book->description);
+}
+
+$owner_icon = elgg_view_entity_icon($book, 'small');
+$authors_text = array();
+foreach($authors as $author) {
+	array_push($authors_text, elgg_view('output/url', array(
+		'href' => $author->getURL(),
+		'text' => $author->first_name.' '.$author->last_name,
+	)));
+}
+$authors_text = implode(', ', $authors_text);
+$tags = elgg_view('output/tags', array('tags' => $book->tags));
+
+// The "on" status changes for comments, so best to check for !Off
+if ($book->comments_on != 'Off') {
+	$comments_count = $book->countComments();
+	//only display if there are commments
+	if ($comments_count != 0) {
+		$text = elgg_echo("comments") . " ($comments_count)";
+		$comments_link = elgg_view('output/url', array(
+			'href' => $book->getURL() . '#book-comments',
+			'text' => $text,
+			'is_trusted' => true,
+		));
+	} else {
+		$comments_link = '';
+	}
+} else {
+	$comments_link = '';
+}
+
+$metadata = elgg_view_menu('entity', array(
+	'entity' => $vars['entity'],
+	'handler' => 'books',
+	'sort_by' => 'priority',
+	'class' => 'elgg-menu-hz',
+));
+
+$subtitle = "$authors_text $date $comments_link $categories";
+
+// do not show the metadata and controls in widget view
+if (elgg_in_context('widgets')) {
+	$metadata = '';
+}
+
+if ($full) {
+
+	$body = elgg_view('output/longtext', array(
+		'value' => $book->description,
+		'class' => 'book-post',
+	));
+
+	$params = array(
+		'entity' => $book,
+		'title' => false,
+		'metadata' => $metadata,
+		'subtitle' => $subtitle,
+		'tags' => $tags,
+	);
+	$params = $params + $vars;
+	$summary = elgg_view('object/elements/summary', $params);
+
+	echo elgg_view('object/elements/full', array(
+		'summary' => $summary,
+		'icon' => $owner_icon,
+		'body' => $body,
+	));
+
+} else {
+	// brief view
+
+	$params = array(
+		'subtitle' => $subtitle,
+		'metadata' => $metadata,
+	);
+	$params = $params + $vars;
+	$list_body = elgg_view('object/elements/summary', $params);
+
+	echo elgg_view_image_block($owner_icon, $list_body);
+}
+
